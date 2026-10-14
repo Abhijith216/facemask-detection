@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.kaggle-cache/
+.keras/
+.matplotlib/
+*.log
+
+# Keep the trained model, face detector weights, and dataset in Git so a
+# checkout includes the assets needed to run image and webcam detection.
+
+# Database
+backend/history.db
+
+# Outputs (metrics and plots are kept for GitHub showcase)
+!backend/outputs/*.png
+!backend/outputs/*.json
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+
+# Environment files
+frontend/.env.local
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
