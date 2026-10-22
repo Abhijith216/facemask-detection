@@ -1,0 +1,162 @@
+name: Frontend, backend and regression tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_CPP_MIN_LOG_LEVEL: '2'
+  TF_NUM_INTEROP_THREADS: '1'
+  TF_NUM_INTRAOP_THREADS: '1'
+  OMP_NUM_THREADS: '2'
+  MPLBACKEND: Agg
+
+jobs:
+  frontend:
+    name: Frontend lint, TypeScript and production build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: mkdir -p ../reports/frontend
+      - name: Install locked dependencies
+        id: install
+        run: npm ci 2>&1 | tee ../reports/frontend/install.log
+      - name: Lint frontend and browser tests
+        id: lint
+        run: npm run lint 2>&1 | tee ../reports/frontend/lint.log
+      - name: TypeScript and production build
+        id: build
+        run: npm run build 2>&1 | tee ../reports/frontend/build.log
+      - name: Publish frontend summary
+        if: always()
+        run: |
+          mkdir -p ../reports/frontend
+          cat > ../reports/frontend/summary.md <<'EOF'
+          ## Frontend checks
+
+          | Check | Result |
+          |---|---|
+          | Locked dependency install | ${{ steps.install.outcome }} |
+          | Lint | ${{ steps.lint.outcome }} |
+          | TypeScript and production build | ${{ steps.build.outcome }} |
+
+          Lint warnings and bundle-size warnings are preserved in the logs.
+          EOF
+          cat ../reports/frontend/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: frontend-check-report
+          path: reports/frontend
+          retention-days: 14
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: frontend-production-build
+          path: frontend/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  backend:
+    name: Backend API and face-detection regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Dependency compatibility and Python compilation
+        run: |
+          python -m pip check
+          python -m compileall -q .
+      - name: Run API and detector regression suite
+        id: regressions
+        run: python run_tests.py --report-dir ../reports/backend
+      - name: Compare face detector coverage on dataset samples
+        id: coverage
+        run: python check_detection.py | tee ../reports/backend/coverage.json
+      - name: Publish backend summary
+        if: always()
+        run: |
+          mkdir -p ../reports/backend
+          if [ -f ../reports/backend/summary.md ]; then
+            cat ../reports/backend/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "Dataset coverage check: ${{ steps.coverage.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Coverage counts measure images containing a detected face, not mask-classification accuracy." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: backend-regression-report
+          path: reports/backend
+          retention-days: 14
+
+  browser:
+    name: Chromium frontend-to-backend user flows
+    needs: [frontend, backend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: frontend-production-build
+          path: frontend/dist
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install application and browser-test dependencies
+        run: |
+          python -m pip install -r ../backend/requirements.txt
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run real browser, upload, history, download and virtual-camera checks
+        id: e2e
+        run: npm run test:e2e
+      - name: Publish browser summary
+        if: always()
+        run: |
+          echo "## Browser integration tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "Result: ${{ steps.e2e.outcome }}. See the browser artifact for HTML, JSON, JUnit and screenshots." >> "$GITHUB_STEP_SUMMARY"
+          echo "Uses the real Flask API, bundled models and SQLite on an isolated GitHub runner. Camera input is synthetic; physical hardware is not tested. No model is retrained or classification-accuracy claim inferred." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: browser-integration-report
+          path: reports/browser
+          retention-days: 14

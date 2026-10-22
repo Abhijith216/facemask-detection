@@ -25,6 +25,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/.npm-cache/
 backend/outputs/detection_validation/
+frontend/playwright-report/
+frontend/test-results/
+/reports/
 
 # Environment files
 frontend/.env.local

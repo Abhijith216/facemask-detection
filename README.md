@@ -146,6 +146,32 @@ Open the URL printed by Vite (default: `http://localhost:5173`).
 
 ---
 
+## Automated checks
+
+Automated GitHub checks run on pushes to `main`, pull requests, and manual
+Actions runs. The workflow checks frontend lint/TypeScript/build, the backend
+API and face-detection regressions, dataset coverage, and Chromium user flows
+against the real Flask server and bundled models. Download the frontend,
+backend and browser report artifacts from the workflow run; browser reports
+include HTML, JSON, JUnit and screenshots. The camera test uses synthetic video.
+
+To run the same regression checks locally:
+
+```bash
+cd backend
+python run_tests.py
+cd ../frontend
+npm ci
+npm run lint
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+Use the backend virtual environment's Python interpreter. For browser tests,
+set `PYTHON_EXECUTABLE` to its full path if it is not the active interpreter.
+Results are written to `reports/` (excluded from Git).
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
