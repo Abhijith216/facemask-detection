@@ -2,6 +2,7 @@
 import base64
 import io
 import unittest
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +19,23 @@ FIXTURES = Path(__file__).parent / "fixtures"
 class DetectionAPITests(unittest.TestCase):
     def setUp(self):
         self.client = app.test_client()
+
+    def test_spa_deep_links_and_assets_use_frontend_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.html").write_text("<html>Application</html>", encoding="utf-8")
+            (root / "bundle.js").write_text("console.log('asset')", encoding="utf-8")
+            with patch("app.FRONTEND_DIST", directory):
+                for route in ("/", "/image", "/live", "/settings", "/history"):
+                    response = self.client.get(route)
+                    self.assertEqual(response.status_code, 200, route)
+                    self.assertIn(b"Application", response.data)
+                    response.close()
+                response = self.client.get("/bundle.js")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b"console.log", response.data)
+                response.close()
+                self.assertEqual(self.client.get("/api/missing-endpoint").status_code, 404)
 
     def test_real_multipart_collage_returns_all_22_boxes_and_annotation(self):
         with patch("app.insert_detection") as history:

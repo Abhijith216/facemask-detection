@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 FRONTEND_DIST = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
 
-app = Flask(__name__, static_folder=FRONTEND_DIST, static_url_path="")
+app = Flask(__name__, static_folder=None)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
