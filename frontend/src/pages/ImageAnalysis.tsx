@@ -259,7 +259,7 @@ export const ImageAnalysis: React.FC<ImageAnalysisProps> = ({ confidenceThreshol
                     <img
                       src={result.annotated_image}
                       alt="Detection result"
-                      className="max-h-72 object-contain rounded-lg"
+                      className="w-full max-h-[36rem] object-contain rounded-lg"
                     />
                   </div>
                   <div className="p-4 flex justify-between items-center">
@@ -290,13 +290,14 @@ export const ImageAnalysis: React.FC<ImageAnalysisProps> = ({ confidenceThreshol
 
               {/* Per-face breakdown */}
               {(result.summary.uncertain ?? 0) > 0 && (
-                <AlertBanner type="warning" message={`${result.summary.uncertain} face(s) could not be classified reliably. Predictions below ${Math.max(confidenceThreshold, 0.8) * 100}% confidence are marked uncertain. Use a sharper close-up; enlarging a blurred face cannot restore detail.`} />
+                <AlertBanner type="warning" message={`${result.summary.uncertain} face(s) were detected but are too small or below ${Math.round(Math.max(confidenceThreshold, 0.8) * 100)}% confidence to classify reliably. Use a sharper close-up for mask status.`} />
               )}
               {result.detections.length > 0 && (
                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-3">
                     Detection Results
                   </h3>
+                  <p className="text-xs text-slate-400 mb-3">Numbers match the image boxes. Green: mask, red: no mask, grey: uncertain.</p>
                   <div className="space-y-2">
                     {result.detections.map((det, i) => (
                       <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700">

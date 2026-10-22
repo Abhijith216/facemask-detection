@@ -23,6 +23,8 @@ backend/history.db
 # Frontend build artifacts
 frontend/node_modules/
 frontend/dist/
+frontend/.npm-cache/
+backend/outputs/detection_validation/
 
 # Environment files
 frontend/.env.local

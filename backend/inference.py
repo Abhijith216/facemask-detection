@@ -6,12 +6,13 @@ Loads the trained MobileNetV2 model and performs predictions.
 import os
 import json
 import logging
+import threading
 import numpy as np
 import cv2
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from tensorflow.keras.models import load_model
 
-from config import MODEL_PATH, CLASS_NAMES, IMG_SIZE, METRICS_PATH, MIN_CLASSIFICATION_CONFIDENCE
+from config import MODEL_PATH, CLASS_NAMES, IMG_SIZE, METRICS_PATH, MIN_CLASSIFICATION_CONFIDENCE, MIN_CLASSIFICATION_FACE_SIZE
 from face_detector import detect_faces, draw_results
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 _model = None
 _model_loaded = False
 _model_error: str | None = None
+_prediction_lock = threading.Lock()
 
 
 def load_mask_model():
@@ -72,31 +74,32 @@ def _preprocess_face(face_bgr: np.ndarray) -> np.ndarray:
 
 # ─── Core inference ────────────────────────────────────────────────────────
 
-def predict_face(face_bgr: np.ndarray) -> dict:
-    """
-    Run classifier on a single face crop (BGR).
-
-    Returns:
-        label       : predicted class name
-        confidence  : probability of the predicted class [0, 1]
-        probabilities: dict mapping class_name → probability
-    """
+def predict_faces(face_crops: list[np.ndarray]) -> list[dict]:
+    """Classify faces in batches, avoiding one TensorFlow call per crowd member."""
+    if not face_crops:
+        return []
     model = load_mask_model()
     if model is None:
         raise RuntimeError(_model_error or "Model not available")
+    results = []
+    for start in range(0, len(face_crops), 32):
+        inputs = np.concatenate([_preprocess_face(face) for face in face_crops[start:start + 32]])
+        with _prediction_lock:
+            predictions = model.predict(inputs, verbose=0)
+        for probs in predictions:
+            idx = int(np.argmax(probs))
+            results.append({"label": CLASS_NAMES[idx], "confidence": float(probs[idx]),
+                            "probabilities": {name: float(probs[i]) for i, name in enumerate(CLASS_NAMES)}})
+    return results
 
-    inp = _preprocess_face(face_bgr)
-    probs = model.predict(inp, verbose=0)[0]  # shape: (n_classes,)
 
-    idx = int(np.argmax(probs))
-    label = CLASS_NAMES[idx]
-    confidence = float(probs[idx])
-    prob_dict = {CLASS_NAMES[i]: float(probs[i]) for i in range(len(CLASS_NAMES))}
-
-    return {"label": label, "confidence": confidence, "probabilities": prob_dict}
+def predict_face(face_bgr: np.ndarray) -> dict:
+    """Run classifier on one BGR crop; kept for callers using the single-face API."""
+    return predict_faces([face_bgr])[0]
 
 
-def run_inference_on_image(image_bgr: np.ndarray, confidence_threshold: float = MIN_CLASSIFICATION_CONFIDENCE) -> dict:
+def run_inference_on_image(image_bgr: np.ndarray, confidence_threshold: float = MIN_CLASSIFICATION_CONFIDENCE,
+                           high_accuracy: bool = True) -> dict:
     """
     Full pipeline: detect faces → classify → annotate image.
 
@@ -110,20 +113,19 @@ def run_inference_on_image(image_bgr: np.ndarray, confidence_threshold: float = 
     if not np.isfinite(threshold) or not 0 <= threshold <= 1:
         raise ValueError("Confidence threshold must be between 0 and 1.")
     threshold = max(threshold, MIN_CLASSIFICATION_CONFIDENCE)
-    faces = detect_faces(image_bgr)
+    faces = detect_faces(image_bgr, high_accuracy=high_accuracy)
+    predictions = predict_faces([face["face_roi"] for face in faces])
 
     detections = []
-    for face_info in faces:
-        try:
-            pred = predict_face(face_info["face_roi"])
-        except RuntimeError as exc:
-            raise
+    for face_info, pred in zip(faces, predictions):
+        reliable = (pred["confidence"] >= threshold
+                    and min(face_info["w"], face_info["h"]) >= MIN_CLASSIFICATION_FACE_SIZE)
         det = {
             "x": face_info["x"],
             "y": face_info["y"],
             "w": face_info["w"],
             "h": face_info["h"],
-            "label": pred["label"] if pred["confidence"] >= threshold else "uncertain",
+            "label": pred["label"] if reliable else "uncertain",
             "confidence": pred["confidence"],
             "probabilities": pred["probabilities"],
         }

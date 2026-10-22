@@ -49,8 +49,13 @@ DEFAULT_CONFIDENCE_THRESHOLD = 0.8
 # Conservative abstention threshold; confidence is not a guarantee of accuracy.
 MIN_CLASSIFICATION_CONFIDENCE = 0.8
 
-# OpenCV ResNet-10 SSD face detector; model files live in backend/models.
-FACE_DETECTOR = "dnn"  # "dnn" | "haarcascade"
+# YuNet searches several scales and overlapping crops for small/masked faces.
+# The legacy detectors remain available for comparison.
+FACE_DETECTOR = "yunet"  # "yunet" | "dnn" | "haarcascade"
+YUNET_MODEL_PATH = os.path.join(BASE_DIR, "models", "face_detection_yunet_2023mar.onnx")
+FACE_DETECTION_CONFIDENCE = 0.6
+# Count tiny faces, but do not claim reliable mask classification from a few pixels.
+MIN_CLASSIFICATION_FACE_SIZE = 16
 
 # Training hyper-parameters (used by train_model.py)
 TRAIN_EPOCHS = 20

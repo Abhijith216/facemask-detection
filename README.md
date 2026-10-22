@@ -195,7 +195,7 @@ VITE_API_BASE_URL=http://localhost:5000
 
 ## Limitations
 
-- Haar Cascade face detection may miss faces at steep angles or in poor lighting.
+- Multi-scale YuNet improves small and masked face detection; severe occlusion, blur and cropped profiles can still cause missed faces.
 - Real-time performance depends on CPU/GPU speed.
 - Two-class model cannot reliably classify incorrectly worn masks without a suitable dataset.
 - Not for medical or law-enforcement use.

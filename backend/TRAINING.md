@@ -32,15 +32,47 @@ When training is redirected to `training.log`, monitor it with
 
 ## Face detector
 
-The default face detector is OpenCV's ResNet-10 SSD (`FACE_DETECTOR = "dnn"`).
-It locates faces before MobileNetV2 classifies mask usage. Download its files
-from OpenCV's official repositories when setting up a fresh checkout:
+The default is YuNet (`FACE_DETECTOR = "yunet"`), bundled in `models/` with its
+MIT license. It locates faces before MobileNetV2 classifies mask usage. Uploads
+use 320, 640 and 1280 pixel whole-image passes plus up to 25 overlapping crops.
+This avoids losing small faces when a collage or crowd is reduced to 300x300.
+Duplicate and partial crop boxes are merged before classification; all boxes
+are returned in the original image coordinates. Webcam frames use 320 and 640
+pixel passes to keep latency lower. Crops are classified in batches of 32.
+
+To restore the bundled YuNet asset:
+
+```powershell
+Invoke-WebRequest 'https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx' -OutFile models/face_detection_yunet_2023mar.onnx
+```
+
+See `models/README.md` for the source, checksum and license. The legacy
+ResNet-10 SSD is still selectable with `FACE_DETECTOR = "dnn"`. Its files are:
 
 ```powershell
 Invoke-WebRequest 'https://raw.githubusercontent.com/opencv/opencv/4.10.0/samples/dnn/face_detector/deploy.prototxt' -OutFile models/deploy.prototxt
 Invoke-WebRequest 'https://raw.githubusercontent.com/opencv/opencv_3rdparty/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel' -OutFile models/res10_300x300_ssd_iter_140000.caffemodel
 ```
 
-Run `.\.venv\Scripts\python.exe check_detection.py` to compare Haar and DNN
-face coverage on 40 local dataset images per class and a blank frame. These
-counts measure face detection coverage, not classifier accuracy.
+Run `.\.venv\Scripts\python.exe check_detection.py` to compare Haar, SSD and
+YuNet on the first 40 local dataset images per class and a blank frame. These
+counts measure whether any face was found, not classification accuracy or
+recall over every face. In the checked samples, SSD found faces in 35/40 masked
+images and 40/40 unmasked images; YuNet found 37/40 and 40/40 respectively.
+The reported collage improved from 10 boxes to 22 individually matched faces.
+
+Run the detector, classifier batching and upload API regression suite:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Detected faces are retained even when mask classification is uncertain.
+Classification below the confidence threshold or on a crop smaller than 16px
+is marked uncertain. Phone EXIF orientation is applied before detection.
+Numbered image boxes correspond to the frontend's per-face results.
+
+No detector can guarantee every face in arbitrary images. Severe occlusion,
+cropped profiles, blur and very small faces can still be missed; mask labels
+also depend on the separately trained classifier. The saved training metrics
+have not been replaced by these detector regression results.

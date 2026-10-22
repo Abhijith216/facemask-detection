@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from PIL import Image
+from PIL import Image, ImageOps
 
 from config import MAX_CONTENT_LENGTH, ALLOWED_EXTENSIONS, DEFAULT_CONFIDENCE_THRESHOLD
 from database import init_db, insert_detection, fetch_history, fetch_statistics, clear_history, count_history
@@ -41,7 +41,7 @@ def allowed_file(filename: str) -> bool:
 
 def image_from_bytes(data: bytes) -> np.ndarray:
     """Convert raw image bytes to a BGR numpy array."""
-    pil_img = Image.open(io.BytesIO(data)).convert("RGB")
+    pil_img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
     arr = np.array(pil_img, dtype=np.uint8)
     return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
@@ -107,7 +107,7 @@ def detect_image():
             return jsonify({"error": "File too large (max 16 MB)"}), 413
 
         image_bgr = image_from_bytes(img_bytes)
-        result = run_inference_on_image(image_bgr, confidence_threshold)
+        result = run_inference_on_image(image_bgr, confidence_threshold, high_accuracy=True)
 
         if result["face_count"] == 0:
             return jsonify({
@@ -150,7 +150,7 @@ def detect_frame():
 
     try:
         image_bgr = image_from_base64(data["frame"])
-        result = run_inference_on_image(image_bgr, confidence_threshold)
+        result = run_inference_on_image(image_bgr, confidence_threshold, high_accuracy=False)
 
         annotated_b64 = encode_image_b64(result["annotated_image"])
         safe_dets = sanitise_detections(result["detections"])
